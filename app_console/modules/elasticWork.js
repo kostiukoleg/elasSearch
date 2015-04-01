@@ -4,6 +4,11 @@
 var client = require('../libs/elasticsearch');
 var natural = require('natural');
 module.exports = {
+    isNumeric: function(num){
+        if(isNaN(num)){
+            return 0;
+        } else return num;
+    },
     comparisonNumber: function (num1,num2){
     var res;
     if (num1>=num2){
@@ -15,8 +20,10 @@ module.exports = {
     },
 
     comparisonString: function (str1,str2){
-        var res = natural.JaroWinklerDistance(str1,str2);
-        return res*100;
+        if(str1 && str2){
+            var res = natural.JaroWinklerDistance(str1,str2);
+            return res*100;
+        }
     },
 
     elasticSearch: function* (id){
@@ -56,39 +63,41 @@ module.exports = {
     },
 
     elastSearchAll: function*(){
+        var date =new Date();
         return yield client.search({
             index: 'search_index',
             type: 'search_type',
             body: {
                 _source: ['realty_id', 'city_name', 'advert_type_name'],
-                query: {
-                    bool: {
-                        must: [
+                "query": {
+                    "bool": {
+                        "must": [
                             {
-                                query_string: {
-                                    default_field: "search_type.city_name",
-                                    query: "Винница"
+                                "query_string": {
+                                    "default_field": "search_type.city_name",
+                                    "query": "Винница"
                                 }
                             },
                             {
-                                query_string: {
-                                    default_field: "search_type.advert_type_name",
-                                    query: "продажа"
+                                "query_string": {
+                                    "default_field": "search_type.advert_type_name",
+                                    "query": "продажа"
                                 }
                             },
                             {
-                                query_string: {
-                                    default_field: "search_type.date_end",
-                                    query: "продажа"
+                                "range": {
+                                    "search_type.date_end.date_end_str": {
+                                        "from": date
+                                    }
                                 }
                             }
                         ],
-                        must_not: [],
-                        should: []
+                        "must_not": [],
+                        "should": []
                     }
                 },
-                from: 0,
-                size: 100
+                "from": 0,
+                "size": 100
             }
         });
     },
@@ -123,27 +132,31 @@ module.exports = {
                     res1 = yield this.searchAds(arr1[i]);
                     res2 = yield this.searchAds(arr1[j]);
 
-                    var price1 = res1[0].price;
-                    var price2 = res2[0].price;
-
-                    console.log("Price "+this.comparisonNumber(price1,price2));
+                    var title1 = this.joinStr(res1[0].advert_type_name,res1[0].realty_type_name,res1[0].city_name,res1[0].district_name,res1[0].street_name);
+                    var title2 = this.joinStr(res2[0].advert_type_name,res2[0].realty_type_name,res2[0].city_name,res2[0].district_name,res2[0].street_name);
 
                     var description1 = res1[0].description;
                     var description2 = res2[0].description;
 
-                    console.log("Description "+this.comparisonString(description1,description2));
+                    var price1 = res1[0].price;
+                    var price2 = res2[0].price;
 
                     var square1 = res1[0].total_square_meters;
                     var square2 = res2[0].total_square_meters;
 
-                    console.log("Square "+this.comparisonNumber(square1,square2));
+                    var compareTitle = this.isNumeric(this.comparisonString(title1,title2));
+                    var compareDecription = this.isNumeric(this.comparisonString(description1,description2));
+                    var comparePrice = this.isNumeric(this.comparisonNumber(price1,price2));
+                    var compareSquare = this.isNumeric(this.comparisonNumber(square1,square2));
 
-                    var searchId1 = this.joinStr(res1[0].advert_type_name,res1[0].realty_type_name,res1[0].city_name,res1[0].district_name,res1[0].street_name);
-                    var searchId2 = this.joinStr(res2[0].advert_type_name,res2[0].realty_type_name,res2[0].city_name,res2[0].district_name,res2[0].street_name);
+                    var similarity = (compareTitle*0.45)+(compareDecription*0.3)+(comparePrice*0.1)+(compareSquare*0.15);
 
-                    console.log("Title "+this.comparisonString(searchId1,searchId2));
-                    console.log("ADS number "+res1[0].realty_id+" | "+res2[0].realty_id);
-                    console.log("***************************************************************************");
+                    //console.log("Price "+comparePrice);
+                   // console.log("Description "+compareDecription);
+                    //console.log("Square "+compareSquare);
+                    //console.log("Title "+compareTitle);
+                    console.log("similarity: "+similarity);
+                    console.log(res1[0].realty_id+" | "+res2[0].realty_id+"***************************************************************************");
                 }
             }
         }
